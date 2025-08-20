@@ -1,0 +1,6 @@
+{
+  "name": "AI Cross-Domain Orchestrator",
+  "description": "A dashboard to monitor and manage AI agents collaborating across two distinct domains, coordinating updates, upgrades, and knowledge synchronization using Gemini and OpenAI as foundational intelligence engines.",
+  "requestFramePermissions": [],
+  "prompt": ""
+}
