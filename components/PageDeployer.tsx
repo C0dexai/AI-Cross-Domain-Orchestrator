@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { dbService, STORE_NAMES } from '../services/dbService';
 import { generatePageHtml } from '../services/geminiService';
-import { DeployRequest, DeployResult } from '../types';
+import { DeployRequest, DeployResult, EnvironmentVariable } from '../types';
 import { GeminiIcon } from './icons/GeminiIcon';
 import { SpinnerIcon } from './icons/SpinnerIcon';
 import { LinkIcon } from './icons/LinkIcon';
@@ -11,6 +11,7 @@ interface PageDeployerState {
     title: string;
     html: string;
     aiPrompt: string;
+    envVars: EnvironmentVariable[];
 }
 
 const PageDeployer: React.FC = () => {
@@ -19,6 +20,10 @@ const PageDeployer: React.FC = () => {
         title: 'My New Agent Page',
         html: '<!DOCTYPE html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8">\n  <title>My New Agent Page</title>\n  <style></style>\n</head>\n<body>\n  <h1>Hello, World!</h1>\n</body>\n</html>',
         aiPrompt: 'A modern, professional landing page for a new AI agent named "Orion".',
+        envVars: [
+            { id: 'env-1', key: 'API_NAME', value: '' },
+            { id: 'env-2', key: 'API_KEY', value: '' },
+        ],
     });
     const [isGenerating, setIsGenerating] = useState(false);
     const [isDeploying, setIsDeploying] = useState(false);
@@ -28,6 +33,12 @@ const PageDeployer: React.FC = () => {
         const loadState = async () => {
             const storedState = await dbService.get<PageDeployerState>(STORE_NAMES.PAGE_DEPLOYER, 'state');
             if (storedState) {
+                if (!storedState.envVars) {
+                     storedState.envVars = [
+                        { id: 'env-1', key: 'API_NAME', value: '' },
+                        { id: 'env-2', key: 'API_KEY', value: '' },
+                    ];
+                }
                 setState(storedState);
             }
         };
@@ -41,8 +52,28 @@ const PageDeployer: React.FC = () => {
         return () => clearTimeout(handler);
     }, [state]);
 
-    const handleStateChange = (field: keyof PageDeployerState, value: string) => {
+    const handleStateChange = (field: keyof Omit<PageDeployerState, 'envVars'>, value: string) => {
         setState(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleEnvVarChange = (index: number, field: 'key' | 'value', value: string) => {
+        const newEnvVars = [...state.envVars];
+        newEnvVars[index] = { ...newEnvVars[index], [field]: value };
+        setState(prev => ({ ...prev, envVars: newEnvVars }));
+    };
+
+    const addEnvVar = () => {
+        setState(prev => ({
+            ...prev,
+            envVars: [...prev.envVars, { id: `env-${Date.now()}`, key: '', value: '' }]
+        }));
+    };
+
+    const removeEnvVar = (id: string) => {
+        setState(prev => ({
+            ...prev,
+            envVars: prev.envVars.filter(v => v.id !== id)
+        }));
     };
 
     const sanitizedSlug = useMemo(() => 
@@ -68,10 +99,19 @@ const PageDeployer: React.FC = () => {
     const handleDeploy = useCallback(async () => {
         setIsDeploying(true);
         setDeployResult(null);
+
+        const env: { [key: string]: string } = {};
+        state.envVars.forEach(v => {
+            if (v.key) {
+                env[v.key] = v.value;
+            }
+        });
+
         const requestBody: DeployRequest = {
             slug: sanitizedSlug,
             title: state.title,
             html: state.html,
+            env,
         };
         try {
             // Using /orch/ as a proxy prefix as per spec for SPAs
@@ -92,7 +132,7 @@ const PageDeployer: React.FC = () => {
         } finally {
             setIsDeploying(false);
         }
-    }, [sanitizedSlug, state.title, state.html]);
+    }, [sanitizedSlug, state.title, state.html, state.envVars]);
 
 
     return (
@@ -110,6 +150,19 @@ const PageDeployer: React.FC = () => {
                             <label htmlFor="slug" className="block text-sm font-medium text-slate-300 mb-1">URL Slug</label>
                             <input id="slug" type="text" value={state.slug} onChange={e => handleStateChange('slug', e.target.value)} className="w-full bg-slate-900/50 border border-slate-600/80 rounded-md p-2 text-slate-200 focus:border-sky-500 focus:ring-sky-500"/>
                             <p className="text-xs text-slate-400 mt-1">URL: <code className="text-sky-300">/gemini/{sanitizedSlug}.html</code></p>
+                        </div>
+                        <div>
+                            <h3 className="text-base font-semibold text-slate-300 mt-4 mb-2">Container Environment</h3>
+                            <div className="space-y-2">
+                                {state.envVars.map((envVar, index) => (
+                                    <div key={envVar.id} className="flex items-center space-x-2 group">
+                                        <input type="text" placeholder="Key" value={envVar.key} onChange={e => handleEnvVarChange(index, 'key', e.target.value)} className="flex-1 bg-slate-900/50 border border-slate-600/80 rounded-md p-2 focus:border-sky-500 focus:ring-sky-500 outline-none font-mono text-sm" />
+                                        <input type="text" placeholder="Value" value={envVar.value} onChange={e => handleEnvVarChange(index, 'value', e.target.value)} className="flex-1 bg-slate-900/50 border border-slate-600/80 rounded-md p-2 focus:border-sky-500 focus:ring-sky-500 outline-none font-mono text-sm" />
+                                        <button onClick={() => removeEnvVar(envVar.id)} className="text-slate-500 hover:text-red-500 p-1 opacity-50 group-hover:opacity-100 transition-opacity">✕</button>
+                                    </div>
+                                ))}
+                                <button onClick={addEnvVar} className="text-sky-400 hover:text-sky-300 text-sm font-semibold pt-1">+ Add Variable</button>
+                            </div>
                         </div>
                     </div>
                 </div>

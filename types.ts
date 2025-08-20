@@ -109,11 +109,18 @@ export interface TerminalLine {
     prompt?: string;
 }
 
+export interface EnvironmentVariable {
+  id: string;
+  key: string;
+  value: string;
+}
+
 // Types for Page Deployer
 export interface DeployRequest {
   slug: string;
   title: string;
   html: string;
+  env?: { [key: string]: string };
 }
 
 export interface DeploySuccessResponse {
